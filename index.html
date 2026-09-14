@@ -3694,3 +3694,119 @@ document.addEventListener("DOMContentLoaded",addLauncher);
 })(); // IIFE
 </script>
 <!-- End Document Addon -->
+
+
+<!-- ADDED: K Long-Term Local Memory + K Mini Chatbot Platform (append-only) -->
+<style id="k-memory-mini-additions">
+#kMemoryPanel,#kMiniPanel{position:fixed;inset:0;background:#030405;z-index:13000;display:none;flex-direction:column}
+.km-head{display:flex;align-items:center;justify-content:space-between;padding:12px;border-bottom:1px solid #17272b}
+.km-body{padding:14px;overflow:auto;flex:1}
+.km-card{background:#071116;border:1px solid #193238;border-radius:12px;padding:12px;margin:8px 0}
+.km-actions{display:flex;gap:8px;flex-wrap:wrap}
+.km-actions button,.km-btn{padding:9px 11px;border:0;border-radius:9px;background:#086b78;color:#fff;cursor:pointer}
+.km-secondary{background:#17252a!important}
+.km-input,.km-textarea{width:100%;box-sizing:border-box;padding:10px;border-radius:9px;border:1px solid #20383e;background:#071116;color:#fff;margin:5px 0}
+.km-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.km-bot-msg{padding:10px;border-radius:12px;background:#0a1720;margin:7px 0}
+.km-user-msg{padding:10px;border-radius:12px;background:#073233;margin:7px 0;margin-left:12%}
+@media(max-width:700px){.km-grid{grid-template-columns:1fr}}
+</style>
+<script id="k-memory-mini-platform">
+(function(){
+"use strict";
+const KMEM_KEY="k_long_term_memory_v1";
+const KBOT_KEY="k_mini_chatbots_v1";
+function kmGet(k,f){try{const x=localStorage.getItem(k);return x?JSON.parse(x):f}catch(e){return f}}
+function kmSet(k,v){localStorage.setItem(k,JSON.stringify(v))}
+function kmEsc(x){return String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function kmMemories(){return kmGet(KMEM_KEY,[])}
+function kmBots(){return kmGet(KBOT_KEY,[])}
+function kmRemember(info){
+  info=String(info||"").trim();if(!info)return false;
+  const a=kmMemories();
+  if(!a.some(x=>x.toLowerCase()===info.toLowerCase())){a.push(info);kmSet(KMEM_KEY,a)}
+  return true;
+}
+function kmForgetAll(){localStorage.removeItem(KMEM_KEY);kmRenderMemory()}
+function kmRenderMemory(){
+  const el=document.getElementById("kmMemoryList");if(!el)return;
+  const a=kmMemories();
+  el.innerHTML=a.length?a.map((x,i)=>`<div class="km-card"><b>${i+1}.</b> ${kmEsc(x)}</div>`).join(""):"<div class='small-muted'>No long-term memories saved locally.</div>";
+}
+function kmMemoryContext(){
+  const a=kmMemories();
+  return a.length?"\n\nLong-term memories explicitly saved by the user:\n"+a.map((x,i)=>(i+1)+". "+x).join("\n"):"";
+}
+function kmIsRemember(t){return /^\s*remember\s*\+/i.test(t)}
+function kmRememberText(t){return t.replace(/^\s*remember\s*\+\s*/i,"").trim()}
+function kmHandleRemember(t){
+  const info=kmRememberText(t);if(!info)return false;
+  kmRemember(info);
+  if(typeof addMessageElement==="function")addMessageElement("I’ll remember that for future chats on this browser. Saved locally.","bot",true);
+  return true;
+}
+function kmAnswer(text,bot){
+  const q=(text||"").trim().toLowerCase();
+  if(kmIsRemember(text)){kmRemember(kmRememberText(text));return "Remembered locally for future chats on this browser."}
+  if(/what do you remember|what you remember|what do you know about me|מה את זוכרת|מה אתה זוכר/.test(q)){
+    const a=kmMemories();return a.length?"Here is what I remember locally:\n"+a.map((x,i)=>`${i+1}. ${x}`).join("\n"):"I don't have any saved long-term memories yet.";
+  }
+  const key=typeof normalize==="function"?normalize(text):q.replace(/[?.!]/g,"").replace(/\s+/g," ");
+  if(typeof builtinQA!=="undefined" && builtinQA[key])return builtinQA[key];
+  if(/^define /.test(q)||/^explain /.test(q)){
+    const term=q.split(/\s+/).slice(1).join(" ");
+    if(typeof builtinQA!=="undefined"&&builtinQA["what is "+term])return builtinQA["what is "+term];
+  }
+  const behavior=bot&&bot.prompt?bot.prompt:"";
+  return "I am a K mini chatbot. I can answer using the K knowledge built into this browser."+(behavior?"\n\nBehavior instruction: "+behavior:"")+(kmMemoryContext()?"\n\n"+kmMemoryContext():"");
+}
+function kmAddLauncher(){
+  if(document.getElementById("kMemoryLauncher"))return;
+  const b=document.createElement("button");b.id="kMemoryLauncher";b.className="btn";b.textContent="K Memory & Mini Chatbots";b.style.margin="6px auto";b.style.display="block";
+  b.onclick=kmOpenHome;
+  const anchor=document.querySelector("header")||document.body.firstElementChild;
+  (anchor?.parentNode||document.body).insertBefore(b,anchor?.nextSibling||null);
+}
+function kmOpenHome(){kmEnsureUI();document.getElementById("kMiniPanel").style.display="flex";kmRenderBots()}
+function kmClose(){document.getElementById("kMiniPanel").style.display="none";document.getElementById("kMemoryPanel").style.display="none"}
+function kmOpenMemory(){kmEnsureUI();document.getElementById("kMemoryPanel").style.display="flex";kmRenderMemory()}
+function kmRenderBots(){
+  const el=document.getElementById("kmBotList");if(!el)return;
+  const a=kmBots();
+  el.innerHTML=a.length?a.map(b=>`<div class="km-card"><b>${kmEsc(b.name)}</b><div class="small-muted">${kmEsc(b.prompt||"Default K behavior")}</div><div class="km-actions"><button data-open="${kmEsc(b.id)}">Open</button><button data-download="${kmEsc(b.id)}">Download HTML</button></div></div>`).join(""):"<div class='small-muted'>No K mini chatbots yet.</div>";
+  el.querySelectorAll("[data-open]").forEach(x=>x.onclick=()=>kmOpenBot(x.dataset.open));
+  el.querySelectorAll("[data-download]").forEach(x=>x.onclick=()=>kmDownloadBot(x.dataset.download));
+}
+function kmOpenBot(id){
+  const b=kmBots().find(x=>x.id===id);if(!b)return;
+  const panel=document.getElementById("kmMiniPanel"),chat=document.getElementById("kmBotChat"),inp=document.getElementById("kmBotInput");
+  panel.style.display="flex";document.getElementById("kmBotTitle").textContent=b.name+" — Powered by K";
+  chat.innerHTML=`<div class="km-bot-msg"><b>${kmEsc(b.name)}</b><br>Created and Powered by K</div>`;
+  const send=()=>{const t=inp.value.trim();if(!t)return;chat.insertAdjacentHTML("beforeend",`<div class="km-user-msg">${kmEsc(t)}</div><div class="km-bot-msg">${kmEsc(kmAnswer(t,b)).replace(/\n/g,"<br>")}</div>`);inp.value="";chat.scrollTop=chat.scrollHeight};
+  document.getElementById("kmBotSend").onclick=send;inp.onkeydown=e=>{if(e.key==="Enter")send()};
+}
+function kmNewBot(){
+  const name=(document.getElementById("kmNewBotName").value.trim()||"My K Mini Chatbot");
+  const prompt=document.getElementById("kmNewBotPrompt").value.trim();
+  const a=kmBots(),b={id:Date.now().toString(36)+Math.random().toString(36).slice(2,7),name,prompt,created:new Date().toISOString()};
+  a.push(b);kmSet(KBOT_KEY,a);document.getElementById("kmNewBotName").value="";document.getElementById("kmNewBotPrompt").value="";kmRenderBots();
+}
+function kmDownloadBot(id){
+  const b=kmBots().find(x=>x.id===id);if(!b)return;
+  const q=JSON.stringify(b).replace(/</g,"\\u003c");
+  const qa=typeof builtinQA!=="undefined"?JSON.stringify(builtinQA).replace(/</g,"\\u003c"):"{}";
+  const html=`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${kmEsc(b.name)}</title><style>body{margin:0;background:#040506;color:#fff;font-family:system-ui;padding:14px}.box{max-width:760px;margin:auto}.chat{height:65vh;overflow:auto;background:#071116;border:1px solid #193238;border-radius:14px;padding:10px}.m{padding:10px;border-radius:12px;margin:7px 0;white-space:pre-wrap}.b{background:#0a1720}.u{background:#073233;margin-left:12%}.bar{display:flex;gap:8px;margin-top:8px}input{flex:1;padding:12px;border-radius:10px;border:1px solid #20383e;background:#071116;color:#fff}button{padding:12px;border:0;border-radius:10px;background:#086b78;color:#fff}footer{text-align:center;color:#99a1a8;font-size:12px;padding:9px}</style></head><body><div class="box"><h2>${kmEsc(b.name)}</h2><div id="chat" class="chat"><div class="m b">Hello. I am a K mini chatbot.</div></div><div class="bar"><input id="i" placeholder="Message..."><button id="s">Send</button></div><footer>Created and Powered by K</footer></div><script>const BOT=${q};const QA=${qa};const chat=document.getElementById("chat"),i=document.getElementById("i");function esc(x){return String(x??"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))}function answer(t){let k=t.trim().toLowerCase().replace(/[?.!]/g,"").replace(/\\s+/g," ");if(/^remember\\s*\\+/i.test(t)){let v=t.replace(/^\\s*remember\\s*\\+\\s*/i,"");let a=JSON.parse(localStorage.getItem("k_mini_memory_v1")||"[]");if(!a.includes(v))a.push(v);localStorage.setItem("k_mini_memory_v1",JSON.stringify(a));return "Remembered locally for future chats."}if(/^what do you remember/i.test(t)){let a=JSON.parse(localStorage.getItem("k_mini_memory_v1")||"[]");return a.length?a.map((x,n)=>(n+1)+". "+x).join("\\n"):"I have no saved memories."}if(QA[k])return QA[k];return "I am powered by K. ${kmEsc(b.prompt||"Use the K knowledge available in this mini chatbot.")}"}function send(){let t=i.value.trim();if(!t)return;chat.insertAdjacentHTML("beforeend",'<div class="m u">'+esc(t)+'</div><div class="m b">'+esc(answer(t))+'</div>');i.value="";chat.scrollTop=chat.scrollHeight}document.getElementById("s").onclick=send;i.onkeydown=e=>{if(e.key==="Enter")send()};</script></body></html>`;
+  const blob=new Blob([html],{type:"text/html;charset=utf-8"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=(b.name||"k-mini-chatbot").replace(/[^a-z0-9_-]+/gi,"-")+".html";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function kmEnsureUI(){
+ if(document.getElementById("kMiniPanel"))return;
+ document.body.insertAdjacentHTML("beforeend",`<div id="kMemoryPanel"><div class="km-head"><b>K Long-Term Memory</b><button class="km-btn km-secondary" id="kmMemClose">Close</button></div><div class="km-body"><div class="km-card">Only messages beginning with <b>Remember +</b> are saved. Memories are stored locally in this browser.</div><div id="kmMemoryList"></div><div class="km-actions"><button class="km-btn" id="kmMemClear">Clear memories</button></div></div></div>
+ <div id="kMiniPanel"><div class="km-head"><b id="kmBotTitle">K Mini Chatbots</b><div class="km-actions"><button class="km-btn" id="kmBack">Back</button><button class="km-btn km-secondary" id="kmMiniClose">Close</button></div></div><div class="km-body"><div class="km-card"><h3 style="margin-top:0">Create a mini chatbot Powered by K</h3><input id="kmNewBotName" class="km-input" placeholder="Chatbot name"><textarea id="kmNewBotPrompt" class="km-textarea" rows="4" placeholder="Behavior prompt: how should this K chatbot behave?"></textarea><button class="km-btn" id="kmCreateBot">Create chatbot</button></div><div id="kmBotChat" class="km-card" style="min-height:180px;overflow:auto"></div><div class="km-actions"><input id="kmBotInput" class="km-input" style="flex:1" placeholder="Message your K mini chatbot"><button class="km-btn" id="kmBotSend">Send</button></div><h3>My K Mini Chatbots</h3><div id="kmBotList"></div><div class="km-card" style="text-align:center;font-weight:700">Created and Powered by K</div></div></div>`);
+ document.getElementById("kmMemClose").onclick=kmClose;document.getElementById("kmMiniClose").onclick=kmClose;document.getElementById("kmBack").onclick=()=>{document.getElementById("kmBotChat").innerHTML="";kmRenderBots()};document.getElementById("kmCreateBot").onclick=kmNewBot;document.getElementById("kmMemClear").onclick=()=>{if(confirm("Clear all locally saved K memories?"))kmForgetAll()};kmRenderBots();
+}
+document.addEventListener("DOMContentLoaded",kmAddLauncher);
+document.addEventListener("click",function(e){if(e.target===document.getElementById("sendBtn")&&kmIsRemember(document.getElementById("input")?.value||"")){e.stopImmediatePropagation();kmHandleRemember(document.getElementById("input").value);document.getElementById("input").value=""}},true);
+document.addEventListener("keydown",function(e){if(e.key==="Enter"&&!e.shiftKey&&e.target===document.getElementById("input")&&kmIsRemember(e.target.value)){e.preventDefault();e.stopImmediatePropagation();kmHandleRemember(e.target.value);e.target.value=""}},true);
+window.KLocalMemory={remember:kmRemember,list:kmMemories,clear:kmForgetAll,context:kmMemoryContext};
+})();
+</script>
