@@ -86,6 +86,26 @@ html, body {
 }
 </style>
 
+
+<style id="k-app-builder-additions">
+#kAuthGate{position:fixed;inset:0;background:#040506;z-index:12000;display:none;align-items:center;justify-content:center;padding:20px;box-sizing:border-box}
+#kAuthGate .k-auth-card{width:min(440px,100%);background:#0b0c0e;border:1px solid #183038;border-radius:18px;padding:22px;box-shadow:0 20px 60px #000}
+#kAuthGate h2{margin:0 0 8px}.k-auth-card p{color:#99a1a8;font-size:13px}
+.k-auth-tabs{display:flex;gap:8px;margin:14px 0}.k-auth-tabs button,.k-builder button{cursor:pointer}
+.k-auth-tabs button{flex:1;padding:10px;border-radius:10px;border:1px solid #234047;background:#071216;color:#fff}
+.k-auth-tabs button.active{background:#0a5f68}
+.k-auth-card input,.k-builder input,.k-builder textarea{width:100%;box-sizing:border-box;padding:11px;margin:6px 0;border-radius:10px;border:1px solid #20383e;background:#071116;color:#fff}
+#kAuthSubmit{width:100%;margin-top:8px}.k-auth-msg{min-height:18px;color:#9fd}
+#kBuilderPanel{position:fixed;inset:0;background:#030405;z-index:11000;display:none;flex-direction:column}
+.k-builder-head{display:flex;align-items:center;justify-content:space-between;padding:12px;border-bottom:1px solid #17272b}
+.k-builder-body{display:flex;flex:1;min-height:0;gap:10px;padding:10px;box-sizing:border-box}
+.k-builder-side{width:min(360px,42%);overflow:auto}.k-builder-preview{flex:1;min-width:0;border:1px solid #20383e;border-radius:12px;background:#fff;overflow:hidden}
+#kCanvas{width:100%;height:100%;border:0;background:#fff}
+.k-builder-actions{display:flex;gap:7px;flex-wrap:wrap;margin:8px 0}.k-builder button{padding:9px 11px;border:0;border-radius:9px;background:#086b78;color:#fff}
+.k-builder .secondary{background:#17252a}.k-app-list{margin-top:10px}.k-app-item{padding:9px;border:1px solid #193238;border-radius:9px;margin:6px 0;background:#071116;cursor:pointer}
+.k-branding{font-size:11px;color:#66777d;text-align:center;padding:5px}
+@media(max-width:700px){.k-builder-body{flex-direction:column}.k-builder-side{width:100%;max-height:45%}.k-builder-preview{min-height:48vh}}
+</style>
 </head>
 <body>
 
@@ -3015,6 +3035,96 @@ try{ localStorage.setItem('lovable_nlp_enabled_v2','0'); }catch(e){}
 })();
 </script>
 <!-- ================= END ADDED: K-12 layer ================= -->
+
+<script id="k-app-builder-additions">
+(function(){
+"use strict";
+const KAPP_KEY="k_k_apps_v1", KUSER_KEY="k_k_account_v1";
+let authMode="login", currentUser=null, currentApp=null;
+const $=id=>document.getElementById(id);
+function esc(x){return String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function accounts(){try{return JSON.parse(localStorage.getItem(KUSER_KEY)||"{}")}catch(e){return {}}}
+function apps(){try{return JSON.parse(localStorage.getItem(KAPP_KEY)||"[]")}catch(e){return []}}
+function saveApps(a){localStorage.setItem(KAPP_KEY,JSON.stringify(a))}
+function userApps(){return apps().filter(a=>a.owner===currentUser?.email)}
+function slug(t){return (t||"app").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,35)||"app"}
+function appAddress(a){return "https://"+slug(a.name)+"-"+a.id.slice(-6)+".k.app"}
+function showAuth(){if(!$("kAuthGate"))return;$("kAuthGate").style.display="flex";$("app").style.visibility="hidden"}
+function hideAuth(){$("kAuthGate").style.display="none";$("app").style.visibility="visible"}
+function renderApps(){
+ const box=$("kAppList"); if(!box)return;
+ const aa=userApps(); box.innerHTML=aa.length?aa.map(a=>`<div class="k-app-item" data-id="${a.id}"><b>${esc(a.name)}</b><br><span class="small-muted">${esc(appAddress(a))}${a.published?" · Published":" · Draft"}</span></div>`).join(""):"<div class='small-muted'>No K web apps yet.</div>";
+ box.querySelectorAll(".k-app-item").forEach(x=>x.onclick=()=>openApp(x.dataset.id));
+}
+function openBuilder(){
+ if(!$("kBuilderPanel"))return;
+ $("kBuilderPanel").style.display="flex"; renderApps();
+ if(!currentApp) newApp();
+}
+function newApp(){
+ currentApp={id:Date.now().toString(36)+Math.random().toString(36).slice(2,8),owner:currentUser.email,name:"My K App",published:false,html:`<div style="font-family:system-ui;padding:28px"><h1>My K App</h1><p>Created with K.</p></div>`};
+ loadEditor();
+}
+function openApp(id){currentApp=apps().find(a=>a.id===id)||currentApp;loadEditor()}
+function loadEditor(){
+ $("kAppName").value=currentApp.name;$("kAppAddress").value=appAddress(currentApp);
+ $("kHtml").value=currentApp.html;
+ $("kCanvas").srcdoc=`<!doctype html><html><body style="margin:0">${currentApp.html}<div class="k-branding">This app was made via K</div></body></html>`;
+ $("kPublished").textContent=currentApp.published?"Published":"Draft";
+}
+function saveCurrent(publish){
+ if(!currentApp)return;
+ currentApp.name=$("kAppName").value.trim()||"My K App";currentApp.html=$("kHtml").value;
+ currentApp.published=!!publish;
+ const all=apps().filter(a=>a.id!==currentApp.id);all.push(currentApp);saveApps(all);loadEditor();renderApps();
+}
+function generateFromPrompt(){
+ const q=$("kPrompt").value.trim();if(!q)return;
+ const title=q.replace(/^make\s+(me\s+)?/i,"").slice(0,60)||"K Web App";
+ currentApp.name=title;
+ currentApp.html=`<div style="font-family:system-ui;max-width:900px;margin:auto;padding:30px"><h1>${esc(title)}</h1><p>${esc(q)}</p><div style="display:flex;gap:10px;flex-wrap:wrap"><button onclick="alert('Button created by K')">Click me</button><button onclick="alert('Hello from K')">Another button</button></div><p><input type="text" placeholder="Type here"></p></div>`;
+ $("kHtml").value=currentApp.html;loadEditor();
+}
+function initUI(){
+ if($("kBuilderPanel"))return;
+ document.body.insertAdjacentHTML("beforeend",`
+ <div id="kAuthGate"><div class="k-auth-card"><h2>K Account</h2><p>Create or sign in to your independent K account. Your K web apps are saved to this account.</p>
+ <div class="k-auth-tabs"><button id="kLoginTab" class="active">Log in</button><button id="kSignupTab">Sign up</button></div>
+ <input id="kEmail" type="email" placeholder="Email"><input id="kPassword" type="password" placeholder="Password">
+ <button id="kAuthSubmit" class="btn">Continue</button><div class="k-auth-msg" id="kAuthMsg"></div></div></div>
+ <div id="kBuilderPanel" class="k-builder"><div class="k-builder-head"><b>K App Canvas</b><div class="k-builder-actions"><button id="kNew">New app</button><button id="kClose" class="secondary">Close</button></div></div>
+ <div class="k-builder-body"><aside class="k-builder-side"><input id="kAppName" placeholder="App name"><input id="kAppAddress" readonly>
+ <textarea id="kPrompt" rows="4" placeholder="Tell K what app you want..."></textarea><button id="kGenerate">Create app with K</button>
+ <textarea id="kHtml" rows="10" placeholder="App Canvas HTML"></textarea>
+ <div class="k-builder-actions"><button id="kSave">Save</button><button id="kPublish">Publish free</button></div>
+ <p class="small-muted">Free publishing. You can add images, buttons, and other web content in your Canvas.</p>
+ <p class="small-muted">Copy you'r K web app's web address and onvert it to Android app via website to app converter</p>
+ <div><b>My K web apps</b><div id="kAppList" class="k-app-list"></div></div></aside>
+ <section class="k-builder-preview"><iframe id="kCanvas" title="K App Canvas"></iframe></section></div>
+ <div class="k-branding">This app was made via K</div></div>`);
+ $("kLoginTab").onclick=()=>{authMode="login";$("kLoginTab").classList.add("active");$("kSignupTab").classList.remove("active");$("kAuthMsg").textContent=""};
+ $("kSignupTab").onclick=()=>{authMode="signup";$("kSignupTab").classList.add("active");$("kLoginTab").classList.remove("active");$("kAuthMsg").textContent=""};
+ $("kAuthSubmit").onclick=()=>{
+   const e=$("kEmail").value.trim().toLowerCase(),p=$("kPassword").value,a=accounts();
+   if(!e||!p)return $("kAuthMsg").textContent="Enter an email and password.";
+   if(authMode==="signup"){if(a[e])return $("kAuthMsg").textContent="An account with this email already exists.";a[e]={email:e,password:p};localStorage.setItem(KUSER_KEY,JSON.stringify(a))}
+   else if(!a[e]||a[e].password!==p)return $("kAuthMsg").textContent="Email or password is incorrect.";
+   currentUser={email:e};hideAuth();openBuilder();
+ };
+ $("kNew").onclick=newApp;$("kClose").onclick=()=>{$("kBuilderPanel").style.display="none"};
+ $("kGenerate").onclick=generateFromPrompt;$("kSave").onclick=()=>saveCurrent(false);$("kPublish").onclick=()=>saveCurrent(true);
+ $("kHtml").addEventListener("input",()=>{if(currentApp){currentApp.html=$("kHtml").value;$("kCanvas").srcdoc=`<!doctype html><html><body style="margin:0">${currentApp.html}<div class="k-branding">This app was made via K</div></body></html>`}});
+}
+function addLauncher(){
+ initUI();
+ const b=document.createElement("button");b.textContent="K App Canvas";b.className="btn";b.id="kAppLauncher";b.style.margin="6px auto";b.style.display="block";
+ b.onclick=()=>{if(!currentUser)showAuth();else openBuilder()};
+ const anchor=document.querySelector("header")||document.body.firstElementChild;
+ (anchor?.parentNode||document.body).insertBefore(b,anchor?.nextSibling||null);
+}
+document.addEventListener("DOMContentLoaded",addLauncher);
+})();
+</script>
 </body>
 
 </html>
