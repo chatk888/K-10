@@ -3810,3 +3810,250 @@ document.addEventListener("keydown",function(e){if(e.key==="Enter"&&!e.shiftKey&
 window.KLocalMemory={remember:kmRemember,list:kmMemories,clear:kmForgetAll,context:kmMemoryContext};
 })();
 </script>
+
+
+<!-- K MINI CHATBOTS + LOCAL MEMORY — APPENDED REPAIR -->
+<style id="k-mini-repair-style">
+#kMiniLauncherRepair{position:fixed;right:12px;top:58px;z-index:12500;padding:10px 13px;border:0;border-radius:10px;background:#086b78;color:#fff;font-weight:700;box-shadow:0 5px 20px #0008;cursor:pointer}
+#kRepairPanel{position:fixed;inset:0;z-index:14000;background:#030405;color:#fff;display:none;flex-direction:column;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial}
+#kRepairPanel.open{display:flex}
+#kRepairHead{display:flex;align-items:center;justify-content:space-between;padding:12px;border-bottom:1px solid #193238}
+#kRepairBody{padding:14px;overflow:auto;flex:1}
+.kr-card{background:#071116;border:1px solid #193238;border-radius:12px;padding:12px;margin:9px 0}
+.kr-input,.kr-textarea{width:100%;box-sizing:border-box;padding:11px;border-radius:9px;border:1px solid #20383e;background:#071116;color:#fff;margin:5px 0}
+.kr-btn{padding:10px 12px;border:0;border-radius:9px;background:#086b78;color:#fff;cursor:pointer}
+.kr-btn.secondary{background:#17252a}
+.kr-row{display:flex;gap:8px;flex-wrap:wrap}
+.kr-chat{min-height:180px;max-height:48vh;overflow:auto}
+.kr-user,.kr-bot{padding:10px;border-radius:11px;margin:7px 0;white-space:pre-wrap}
+.kr-user{background:#073233;margin-left:12%}
+.kr-bot{background:#0a1720}
+.kr-brand{text-align:center;font-size:12px;color:#a9b4b8;font-weight:700;padding:9px;border-top:1px solid #193238}
+</style>
+<script id="k-mini-repair-script">
+(function(){
+"use strict";
+
+var KMEM="k_long_term_memory_v2";
+var KBOTS="k_mini_chatbots_v2";
+
+function getJSON(k,d){
+  try{var v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}
+}
+function setJSON(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+function escK(v){return String(v==null?"":v).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function normK(v){return String(v||"").trim().toLowerCase().replace(/[?.!]/g,"").replace(/\s+/g," ")}
+function memories(){return getJSON(KMEM,[])}
+function bots(){return getJSON(KBOTS,[])}
+function rememberK(v){
+  v=String(v||"").trim(); if(!v)return false;
+  var a=memories();
+  if(!a.some(function(x){return String(x).toLowerCase()===v.toLowerCase()})){a.push(v);setJSON(KMEM,a)}
+  return true;
+}
+function isRememberK(v){return /^\s*remember\s*\+/i.test(String(v||""))}
+function rememberedText(v){return String(v||"").replace(/^\s*remember\s*\+\s*/i,"").trim()}
+
+function addMemoryToMainChat(v){
+  if(typeof addMessageElement==="function"){
+    addMessageElement(v,"bot",true);
+  }else if(typeof addMessage==="function"){
+    addMessage("K",v);
+  }
+}
+
+function interceptMainK(){
+  var input=document.getElementById("input");
+  var send=document.getElementById("sendBtn");
+  if(!input)return;
+
+  function handle(e){
+    var value=input.value||"";
+    if(!isRememberK(value))return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    rememberK(rememberedText(value));
+    input.value="";
+    addMemoryToMainChat("Remembered. I saved that locally in this browser for future chats.");
+  }
+
+  if(send)send.addEventListener("click",handle,true);
+  input.addEventListener("keydown",function(e){
+    if(e.key==="Enter"&&!e.shiftKey)handle(e);
+  },true);
+}
+
+function answerK(text,bot){
+  if(isRememberK(text)){
+    rememberK(rememberedText(text));
+    return "Remembered. I saved that locally in this browser for future chats.";
+  }
+  var q=normK(text);
+  if(/^what do you remember$|^what do you remember\?$|^what do you know about me$/.test(q)){
+    var m=memories();
+    return m.length?"Here is what I remember locally:\n"+m.map(function(x,i){return (i+1)+". "+x}).join("\n"):"I don't have any saved long-term memories yet.";
+  }
+
+  /* Reuse K's existing built-in knowledge when available. */
+  try{
+    if(typeof builtinQA!=="undefined" && builtinQA[q])return builtinQA[q];
+    if((q.indexOf("what is ")===0||q.indexOf("define ")===0||q.indexOf("explain ")===0)){
+      var term=q.replace(/^(what is|define|explain)\s+/,"");
+      if(typeof builtinQA!=="undefined"&&builtinQA["what is "+term])return builtinQA["what is "+term];
+    }
+  }catch(e){}
+
+  var prompt=bot&&bot.prompt?bot.prompt:"";
+  var m2=memories();
+  var response="I am a K mini chatbot, powered by K.";
+  if(prompt)response+="\n\nMy creator's behavior instruction: "+prompt;
+  if(m2.length)response+="\n\nRelevant saved local memories:\n"+m2.join("\n");
+  return response;
+}
+
+function ensureUI(){
+  if(document.getElementById("kRepairPanel"))return;
+
+  var panel=document.createElement("div");
+  panel.id="kRepairPanel";
+  panel.innerHTML=
+    '<div id="kRepairHead"><b id="krTitle">K Mini Chatbots</b><div class="kr-row">'+
+    '<button class="kr-btn secondary" id="krMemory">Memory</button>'+
+    '<button class="kr-btn secondary" id="krClose">Close</button></div></div>'+
+    '<div id="kRepairBody">'+
+    '<div class="kr-card" id="krCreator">'+
+    '<h3 style="margin-top:0">Create a K Mini Chatbot</h3>'+
+    '<input id="krName" class="kr-input" placeholder="Chatbot name">'+
+    '<textarea id="krPrompt" class="kr-textarea" rows="5" placeholder="Behavior prompt — tell K how this chatbot should behave"></textarea>'+
+    '<button class="kr-btn" id="krCreate">Create chatbot</button>'+
+    '</div>'+
+    '<div class="kr-card"><h3 style="margin-top:0">My K Mini Chatbots</h3><div id="krList"></div></div>'+
+    '<div class="kr-card" id="krChatCard" style="display:none">'+
+    '<h3 id="krChatName"></h3><div id="krChat" class="kr-chat"></div>'+
+    '<div class="kr-row"><input id="krInput" class="kr-input" style="flex:1" placeholder="Message..."><button class="kr-btn" id="krSend">Send</button></div>'+
+    '</div></div>'+
+    '<div class="kr-brand">Created and Powered by K</div>';
+
+  document.body.appendChild(panel);
+
+  document.getElementById("krClose").onclick=function(){panel.classList.remove("open")};
+  document.getElementById("krMemory").onclick=showMemory;
+  document.getElementById("krCreate").onclick=createBot;
+  document.getElementById("krSend").onclick=sendBot;
+  document.getElementById("krInput").addEventListener("keydown",function(e){if(e.key==="Enter"){e.preventDefault();sendBot()}});
+  renderBots();
+}
+
+function launcher(){
+  if(document.getElementById("kMiniLauncherRepair"))return;
+  ensureUI();
+
+  var b=document.createElement("button");
+  b.id="kMiniLauncherRepair";
+  b.textContent="K Mini Chatbots";
+  b.title="Create and manage K-powered mini chatbots";
+  b.onclick=function(){
+    ensureUI();
+    document.getElementById("kRepairPanel").classList.add("open");
+    renderBots();
+  };
+  document.body.appendChild(b);
+}
+
+function createBot(){
+  var name=(document.getElementById("krName").value||"").trim()||"My K Mini Chatbot";
+  var prompt=(document.getElementById("krPrompt").value||"").trim();
+  var a=bots();
+  a.push({id:"k_"+Date.now()+"_"+Math.random().toString(36).slice(2,8),name:name,prompt:prompt,created:new Date().toISOString()});
+  setJSON(KBOTS,a);
+  document.getElementById("krName").value="";
+  document.getElementById("krPrompt").value="";
+  renderBots();
+}
+
+function renderBots(){
+  var el=document.getElementById("krList");if(!el)return;
+  var a=bots();
+  if(!a.length){
+    el.innerHTML='<div style="color:#99a1a8">No K mini chatbots created yet.</div>';
+    return;
+  }
+  el.innerHTML=a.map(function(b){
+    return '<div class="kr-card"><b>'+escK(b.name)+'</b>'+
+      '<div style="color:#99a1a8;font-size:13px;margin:5px 0">'+escK(b.prompt||"Default K behavior")+'</div>'+
+      '<div class="kr-row"><button class="kr-btn" data-open="'+escK(b.id)+'">Open</button>'+
+      '<button class="kr-btn secondary" data-dl="'+escK(b.id)+'">Download HTML</button></div></div>';
+  }).join("");
+
+  Array.prototype.forEach.call(el.querySelectorAll("[data-open]"),function(x){
+    x.onclick=function(){openBot(x.getAttribute("data-open"))};
+  });
+  Array.prototype.forEach.call(el.querySelectorAll("[data-dl]"),function(x){
+    x.onclick=function(){downloadBot(x.getAttribute("data-dl"))};
+  });
+}
+
+var activeBot=null;
+function openBot(id){
+  activeBot=bots().find(function(b){return b.id===id});
+  if(!activeBot)return;
+  document.getElementById("krChatCard").style.display="block";
+  document.getElementById("krChatName").textContent=activeBot.name;
+  document.getElementById("krChat").innerHTML='<div class="kr-bot"><b>'+escK(activeBot.name)+'</b><br>Created and Powered by K</div>';
+  document.getElementById("krInput").focus();
+}
+
+function sendBot(){
+  var input=document.getElementById("krInput");if(!input||!activeBot)return;
+  var t=input.value.trim();if(!t)return;
+  var chat=document.getElementById("krChat");
+  chat.insertAdjacentHTML("beforeend",'<div class="kr-user">'+escK(t)+'</div>');
+  chat.insertAdjacentHTML("beforeend",'<div class="kr-bot">'+escK(answerK(t,activeBot))+'</div>');
+  input.value="";chat.scrollTop=chat.scrollHeight;
+}
+
+function showMemory(){
+  var a=memories();
+  var lines=a.length?a.map(function(x,i){return (i+1)+". "+escK(x)}).join("<br>"):"No saved memories.";
+  var body=document.getElementById("kRepairBody");
+  body.innerHTML='<div class="kr-card"><h3>Local K Memory</h3>'+
+    '<p style="color:#99a1a8">Only messages beginning with <b>Remember +</b> are saved. The memories are stored locally in this browser.</p>'+
+    '<div class="kr-card">'+lines+'</div>'+
+    '<div class="kr-row"><button class="kr-btn" id="krBack">Back</button><button class="kr-btn secondary" id="krClear">Clear memories</button></div></div>';
+  document.getElementById("krBack").onclick=function(){location.reload()};
+  document.getElementById("krClear").onclick=function(){localStorage.removeItem(KMEM);location.reload()};
+}
+
+function downloadBot(id){
+  var b=bots().find(function(x){return x.id===id});if(!b)return;
+  var botJson=JSON.stringify(b).replace(/</g,"\\u003c");
+  var qa="{}";
+  try{if(typeof builtinQA!=="undefined")qa=JSON.stringify(builtinQA).replace(/</g,"\\u003c")}catch(e){}
+
+  /* Avoid a literal closing script tag in this parent script. */
+  var closeScript="<"+"/script>";
+  var html='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'+
+    '<title>'+escK(b.name)+'</title><style>body{margin:0;background:#040506;color:#fff;font-family:system-ui;padding:14px}.box{max-width:760px;margin:auto}.chat{height:65vh;overflow:auto;background:#071116;border:1px solid #193238;border-radius:14px;padding:10px}.m{padding:10px;border-radius:12px;margin:7px 0;white-space:pre-wrap}.b{background:#0a1720}.u{background:#073233;margin-left:12%}.bar{display:flex;gap:8px;margin-top:8px}input{flex:1;padding:12px;border-radius:10px;border:1px solid #20383e;background:#071116;color:#fff}button{padding:12px;border:0;border-radius:10px;background:#086b78;color:#fff}footer{text-align:center;color:#99a1a8;font-size:12px;padding:9px;font-weight:700}</style></head><body>'+
+    '<div class="box"><h2>'+escK(b.name)+'</h2><div id="chat" class="chat"><div class="m b">Hello. I am a K mini chatbot.</div></div>'+
+    '<div class="bar"><input id="i" placeholder="Message..."><button id="s">Send</button></div><footer>Created and Powered by K</footer></div>'+
+    '<script>const BOT='+botJson+';const QA='+qa+';const chat=document.getElementById("chat"),i=document.getElementById("i");function esc(x){return String(x??"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))}function send(){let t=i.value.trim();if(!t)return;let q=t.toLowerCase().replace(/[?.!]/g,"").replace(/\\s+/g," ");let r;if(/^remember\\s*\\+/i.test(t)){let v=t.replace(/^\\s*remember\\s*\\+\\s*/i,""),a=JSON.parse(localStorage.getItem("k_mini_memory_v1")||"[]");if(!a.includes(v))a.push(v);localStorage.setItem("k_mini_memory_v1",JSON.stringify(a));r="Remembered locally for future chats."}else if(/^what do you remember/i.test(t)){let a=JSON.parse(localStorage.getItem("k_mini_memory_v1")||"[]");r=a.length?a.map((x,n)=>(n+1)+". "+x).join("\\n"):"I have no saved memories."}else if(QA[q])r=QA[q];else r="I am a K mini chatbot.\\nBehavior instruction: "+(BOT.prompt||"Default K behavior.");chat.insertAdjacentHTML("beforeend",\'<div class="m u">\'+esc(t)+\'</div><div class="m b">\'+esc(r)+\'</div>\');i.value="";chat.scrollTop=chat.scrollHeight}document.getElementById("s").onclick=send;i.onkeydown=e=>{if(e.key==="Enter")send()}'+closeScript+
+    '</body></html>';
+
+  var blob=new Blob([html],{type:"text/html;charset=utf-8"});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement("a");
+  a.href=url;
+  a.download=(b.name||"K-mini-chatbot").replace(/[^a-z0-9_-]+/gi,"-")+".html";
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(function(){URL.revokeObjectURL(url)},1000);
+}
+
+function start(){
+  ensureUI();
+  launcher();
+  interceptMainK();
+}
+if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",start);
+else start();
+})();
+</script>
